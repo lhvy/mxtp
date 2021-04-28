@@ -21,9 +21,9 @@ async fn main() -> Result<(), failure::Error> {
         let playlists = spotify.current_user_playlists(None, None).await?;
         let mut table = Table::new();
         table.set_header(vec!["ID", "Name", "Songs", "Public"]);
-        for (id, playlist) in playlists.items.into_iter().enumerate() {
+        for playlist in playlists.items.into_iter() {
             table.add_row(vec![
-                id.to_string(),
+                playlist.id,
                 playlist.name,
                 playlist.tracks["total"].to_string(),
                 if playlist.public.unwrap() {
