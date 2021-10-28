@@ -1,13 +1,10 @@
 [package]
-authors = ["lhvy <me@lhvy.dev>"]
 edition = "2018"
-license = "MIT OR Apache-2.0"
+license = "MIT"
 name = "mxtp"
 version = "0.1.0"
 
 [dependencies]
 anyhow = "1.0.40"
-comfy-table = "2.1.0"
-failure = "0.1.8"
-rspotify = "0.10.0"
-tokio = {version = "0.2.0", features = ["full"]}
+comfy-table = "4.1.1"
+rspotify = {version = "0.11.2", default-features = false, features = ["cli", "env-file", "client-ureq", "ureq-rustls-tls"]}
