@@ -8,3 +8,4 @@ version = "0.1.0"
 anyhow = "1.0.40"
 comfy-table = "4.1.1"
 rspotify = {version = "0.11.2", default-features = false, features = ["cli", "env-file", "client-ureq", "ureq-rustls-tls"]}
+structopt = "0.3.25"

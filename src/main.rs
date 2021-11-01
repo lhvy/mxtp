@@ -1,44 +1,71 @@
 use comfy_table::Table;
 use rspotify::{prelude::*, scopes, AuthCodeSpotify, Config, Credentials, OAuth};
+use std::str::FromStr;
+use structopt::StructOpt;
 
-// async fn main() -> Result<()> {
-//     let mut oauth = SpotifyOAuth::default()
-//         .scope("playlist-read-private playlist-read-collaborative playlist-modify-public playlist-modify-private")
-//         .build();
+#[derive(StructOpt)]
+enum Opts {
+    Playlists,
+    List {
+        id: ListId,
+    },
+    Export {
+        id: ListId,
+    },
+    Merge {
+        dest: ListId,
+        src: ListId,
+        src_rest: Vec<ListId>,
+    },
+    Sort {
+        id: ListId,
+        kind: Sort,
+    },
+}
 
-//     if let Some(token_info) = get_token(&mut oauth).await {
-//         let client_credential = SpotifyClientCredentials::default()
-//             .token_info(token_info)
-//             .build();
+enum Sort {
+    Random,
+}
 
-//         let spotify = Spotify::default()
-//             .client_credentials_manager(client_credential)
-//             .build();
+impl FromStr for Sort {
+    type Err = &'static str;
 
-//         let playlists = spotify.current_user_playlists(None, None).await?;
-//         let mut table = Table::new();
-//         table.set_header(vec!["ID", "Name", "Songs", "Public"]);
-//         for playlist in playlists.items.into_iter() {
-//             table.add_row(vec![
-//                 playlist.id,
-//                 playlist.name,
-//                 playlist.tracks["total"].to_string(),
-//                 if playlist.public.unwrap() {
-//                     "Yes".to_string()
-//                 } else {
-//                     "No".to_string()
-//                 },
-//             ]);
-//         }
-//         println!("{}", table);
-//     } else {
-//         println!("auth failed");
-//     }
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "random" => Ok(Sort::Random),
+            _ => Err("unknown sort kind"),
+        }
+    }
+}
 
-//     Ok(())
-// }
+#[derive(Debug)]
+struct ListId {
+    id: String,
+}
+
+impl FromStr for ListId {
+    type Err = &'static str;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let id = match s.strip_prefix("https://open.spotify.com/playlist/") {
+            Some(id_and_query) => match id_and_query.find('?') {
+                Some(query_location) => &id_and_query[..query_location],
+                None => id_and_query,
+            },
+            None => s,
+        };
+
+        if id.chars().all(|c| c.is_alphanumeric()) && id.len() == 22 {
+            return Ok(ListId { id: id.to_string() });
+        }
+
+        Err("invalid playlist id")
+    }
+}
 
 fn main() {
+    let args = Opts::from_args();
+
     // Enabling automatic token refreshing in the config
     let mut config = Config::default();
     config.token_refreshing = true;
@@ -58,28 +85,40 @@ fn main() {
     let url = spotify.get_authorize_url(false).unwrap();
     spotify.prompt_for_token(&url).unwrap();
 
-    // Typical iteration, no extra boilerplate needed.
-    let stream = spotify.current_user_playlists();
+    match args {
+        Opts::Playlists => {
+            // Typical iteration, no extra boilerplate needed.
+            let stream = spotify.current_user_playlists();
 
-    let mut table = Table::new();
-    table.set_header(vec!["ID", "Name", "Songs", "Public"]);
-    for item in stream {
-        let playlist = item.unwrap();
-        table.add_row(vec![
-            playlist
-                .id
-                .to_string()
-                .strip_prefix("spotify:playlist:")
-                .unwrap()
-                .to_string(),
-            playlist.name,
-            playlist.tracks.total.to_string(),
-            if playlist.public.unwrap() {
-                "Yes".to_string()
-            } else {
-                "No".to_string()
-            },
-        ]);
+            let mut table = Table::new();
+            table.set_header(vec!["ID", "Name", "Songs", "Public"]);
+            for item in stream {
+                let playlist = item.unwrap();
+                table.add_row(vec![
+                    playlist
+                        .id
+                        .to_string()
+                        .strip_prefix("spotify:playlist:")
+                        .unwrap()
+                        .to_string(),
+                    playlist.name,
+                    playlist.tracks.total.to_string(),
+                    if playlist.public.unwrap() {
+                        "Yes".to_string()
+                    } else {
+                        "No".to_string()
+                    },
+                ]);
+            }
+            println!("{}", table);
+        }
+        Opts::List { id } => todo!(),
+        Opts::Export { id } => todo!(),
+        Opts::Merge {
+            dest,
+            src,
+            src_rest,
+        } => todo!(),
+        Opts::Sort { id, kind } => todo!(),
     }
-    println!("{}", table);
 }
