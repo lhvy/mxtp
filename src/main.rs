@@ -1,5 +1,8 @@
 use comfy_table::Table;
+use rand::prelude::SliceRandom;
+use rspotify::model::PlaylistId;
 use rspotify::{prelude::*, scopes, AuthCodeSpotify, Config, Credentials, OAuth};
+use std::collections::HashMap;
 use std::str::FromStr;
 use structopt::StructOpt;
 
@@ -20,11 +23,14 @@ enum Opts {
     Sort {
         id: ListId,
         kind: Sort,
+        #[structopt(default_value = "ascending")]
+        direction: Direction,
     },
 }
 
 enum Sort {
     Random,
+    Energy,
 }
 
 impl FromStr for Sort {
@@ -33,7 +39,25 @@ impl FromStr for Sort {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
             "random" => Ok(Sort::Random),
+            "energy" => Ok(Sort::Energy),
             _ => Err("unknown sort kind"),
+        }
+    }
+}
+
+enum Direction {
+    Ascending,
+    Descending,
+}
+
+impl FromStr for Direction {
+    type Err = &'static str;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "ascending" => Ok(Direction::Ascending),
+            "descending" => Ok(Direction::Descending),
+            _ => Err("unknown sort direction"),
         }
     }
 }
@@ -119,6 +143,76 @@ fn main() {
             src,
             src_rest,
         } => todo!(),
-        Opts::Sort { id, kind } => todo!(),
+        Opts::Sort {
+            id,
+            kind,
+            direction,
+        } => {
+            let playlist_id = PlaylistId::from_str(&id.id).unwrap();
+            let playlist_items = spotify.playlist_items(&playlist_id, None, None);
+            let mut items = Vec::new();
+            for playlist_item in playlist_items {
+                let track = playlist_item.unwrap().track.unwrap();
+                items.push(track);
+            }
+            let mut playable_ids = Vec::new();
+            let mut track_ids = Vec::new();
+            for item in &items {
+                if let rspotify::model::PlayableItem::Track(t) = item {
+                    track_ids.push((&t.id, item.id()));
+                }
+                playable_ids.push(item.id());
+            }
+            match kind {
+                Sort::Random => {
+                    playable_ids.shuffle(&mut rand::thread_rng());
+                    for (i, chunk) in playable_ids.chunks(100).enumerate() {
+                        if i == 0 {
+                            spotify
+                                .playlist_replace_items(&playlist_id, chunk.iter().copied())
+                                .unwrap();
+                        } else {
+                            spotify
+                                .playlist_add_items(&playlist_id, chunk.iter().copied(), None)
+                                .unwrap();
+                        }
+                    }
+                }
+                Sort::Energy => {
+                    let mut energy = HashMap::new();
+                    for chunk in track_ids.chunks(100) {
+                        for track in spotify
+                            .tracks_features(chunk.iter().map(|(id, _)| *id))
+                            .unwrap()
+                            .unwrap()
+                        {
+                            energy.insert(track.id, track.energy);
+                        }
+                    }
+                    track_ids.sort_by(|(id_a, _), (id_b, _)| match direction {
+                        Direction::Ascending => energy[*id_a].partial_cmp(&energy[*id_b]).unwrap(),
+                        Direction::Descending => energy[*id_b].partial_cmp(&energy[*id_a]).unwrap(),
+                    });
+                    for (i, chunk) in track_ids.chunks(100).enumerate() {
+                        if i == 0 {
+                            spotify
+                                .playlist_replace_items(
+                                    &playlist_id,
+                                    chunk.iter().map(|(_, id)| *id),
+                                )
+                                .unwrap();
+                        } else {
+                            spotify
+                                .playlist_add_items(
+                                    &playlist_id,
+                                    chunk.iter().map(|(_, id)| *id),
+                                    None,
+                                )
+                                .unwrap();
+                        }
+                    }
+                }
+            }
+        }
     }
 }
