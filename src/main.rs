@@ -166,17 +166,7 @@ fn main() {
             match kind {
                 Sort::Random => {
                     playable_ids.shuffle(&mut rand::thread_rng());
-                    for (i, chunk) in playable_ids.chunks(100).enumerate() {
-                        if i == 0 {
-                            spotify
-                                .playlist_replace_items(&playlist_id, chunk.iter().copied())
-                                .unwrap();
-                        } else {
-                            spotify
-                                .playlist_add_items(&playlist_id, chunk.iter().copied(), None)
-                                .unwrap();
-                        }
-                    }
+                    push_playlist(playable_ids, &spotify, &playlist_id);
                 }
                 Sort::Energy => {
                     let mut energy = HashMap::new();
@@ -193,26 +183,45 @@ fn main() {
                         Direction::Ascending => energy[*id_a].partial_cmp(&energy[*id_b]).unwrap(),
                         Direction::Descending => energy[*id_b].partial_cmp(&energy[*id_a]).unwrap(),
                     });
-                    for (i, chunk) in track_ids.chunks(100).enumerate() {
-                        if i == 0 {
-                            spotify
-                                .playlist_replace_items(
-                                    &playlist_id,
-                                    chunk.iter().map(|(_, id)| *id),
-                                )
-                                .unwrap();
-                        } else {
-                            spotify
-                                .playlist_add_items(
-                                    &playlist_id,
-                                    chunk.iter().map(|(_, id)| *id),
-                                    None,
-                                )
-                                .unwrap();
-                        }
-                    }
+                    push_playlist_tracks(track_ids, spotify, playlist_id);
                 }
             }
+        }
+    }
+}
+
+fn push_playlist(
+    playable_ids: Vec<&dyn PlayableId>,
+    spotify: &AuthCodeSpotify,
+    playlist_id: &PlaylistId,
+) {
+    for (i, chunk) in playable_ids.chunks(100).enumerate() {
+        if i == 0 {
+            spotify
+                .playlist_replace_items(playlist_id, chunk.iter().copied())
+                .unwrap();
+        } else {
+            spotify
+                .playlist_add_items(playlist_id, chunk.iter().copied(), None)
+                .unwrap();
+        }
+    }
+}
+
+fn push_playlist_tracks(
+    track_ids: Vec<(&rspotify::model::TrackId, &dyn PlayableId)>,
+    spotify: AuthCodeSpotify,
+    playlist_id: PlaylistId,
+) {
+    for (i, chunk) in track_ids.chunks(100).enumerate() {
+        if i == 0 {
+            spotify
+                .playlist_replace_items(&playlist_id, chunk.iter().map(|(_, id)| *id))
+                .unwrap();
+        } else {
+            spotify
+                .playlist_add_items(&playlist_id, chunk.iter().map(|(_, id)| *id), None)
+                .unwrap();
         }
     }
 }
