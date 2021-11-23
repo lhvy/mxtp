@@ -2,7 +2,7 @@ use comfy_table::Table;
 use rand::prelude::SliceRandom;
 use rspotify::model::PlaylistId;
 use rspotify::{prelude::*, scopes, AuthCodeSpotify, Config, Credentials, OAuth};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
 use structopt::StructOpt;
 
@@ -25,6 +25,9 @@ enum Opts {
         kind: Sort,
         #[structopt(default_value = "ascending")]
         direction: Direction,
+    },
+    Duplicates {
+        id: ListId,
     },
 }
 
@@ -136,7 +139,36 @@ fn main() {
             }
             println!("{}", table);
         }
-        Opts::List { id } => todo!(),
+        Opts::List { id } => {
+            let playlist_id = PlaylistId::from_str(&id.id).unwrap();
+            let playlist_items = spotify.playlist_items(&playlist_id, None, None);
+            let mut table = Table::new();
+            table.set_header(vec!["Name", "Artist", "Album", "Length", "ID"]);
+            for item in playlist_items {
+                let track = item.unwrap().track.unwrap();
+                match track {
+                    rspotify::model::PlayableItem::Track(track) => {
+                        table.add_row(vec![
+                            track.name,
+                            track.artists[0].name.clone(),
+                            track.album.name,
+                            track.duration.as_secs().to_string(),
+                            track.id.to_string(),
+                        ]);
+                    }
+                    rspotify::model::PlayableItem::Episode(episode) => {
+                        table.add_row(vec![
+                            episode.name,
+                            episode.show.publisher,
+                            episode.show.name,
+                            episode.duration.as_secs().to_string(),
+                            episode.id.to_string(),
+                        ]);
+                    }
+                }
+            }
+            println!("{}", table);
+        }
         Opts::Export { id } => todo!(),
         Opts::Merge {
             dest,
@@ -184,6 +216,27 @@ fn main() {
                         Direction::Descending => energy[*id_b].partial_cmp(&energy[*id_a]).unwrap(),
                     });
                     push_playlist_tracks(track_ids, spotify, playlist_id);
+                }
+            }
+        }
+        Opts::Duplicates { id } => {
+            let playlist_id = PlaylistId::from_str(&id.id).unwrap();
+            let playlist_items = spotify.playlist_items(&playlist_id, None, None);
+            let playlist_items: Result<Vec<_>, _> = playlist_items.collect();
+            let playlist_items = playlist_items.unwrap();
+            let mut playlist_hashset = HashSet::new();
+            for item in playlist_items {
+                let playable_item = item.track.unwrap();
+                let id = playable_item.id().id().to_string();
+                if !playlist_hashset.insert(id) {
+                    match playable_item {
+                        rspotify::model::PlayableItem::Track(track) => {
+                            println!("{}", track.name);
+                        }
+                        rspotify::model::PlayableItem::Episode(episode) => {
+                            println!("{}", episode.name)
+                        }
+                    }
                 }
             }
         }
